@@ -1,6 +1,6 @@
 # Spec-Driven Development on GitHub
 
-A single convention for running spec-driven development on GitHub's native issue features. One short spec per epic. The issue graph carries the breakdown, the order, and the state.
+A single convention for running spec-driven development on GitHub's native issue features. One short spec per epic. The issue graph carries the breakdown, the order, and the state. Separate roles build and check the work, and every merge rests on evidence.
 
 ## The Problem
 
@@ -12,9 +12,13 @@ Three problems follow from carrying it:
 - **No home for dependencies.** Each spec sits alone in its folder. The everyday statement "this epic needs that one first" has nowhere native to live, so the order survives in a teammate's memory.
 - **State that dies on reset.** A plan held in chat or scratch files vanishes when the context resets, and the agent rebuilds it from scratch, often differently.
 
+A fourth problem appears once agents do most of the work:
+
+- **Agents grading their own work.** The agent that writes the code also writes the tests and reports that everything passes. Its report is the only evidence, and models describe their own work generously.
+
 ## The Solution
 
-GitHub issues now express hierarchy and dependencies directly, all scriptable through `gh`: sub-issues, blocking relationships, and issue types. The project-management layer already exists, in the place the team already looks. Four principles put it to work.
+GitHub issues now express hierarchy and dependencies directly, all scriptable through `gh`: sub-issues, blocking relationships, and issue types. The project-management layer already exists, in the place the team already looks. Branches, pull requests, labels, and status checks already exist too, and they are enough to keep builders and judges apart. Six principles put it to work.
 
 | Principle | Addresses |
 | --- | --- |
@@ -22,6 +26,8 @@ GitHub issues now express hierarchy and dependencies directly, all scriptable th
 | **Graph Over Files** | A second source of truth, state lost on reset |
 | **Fence With Non-Goals** | Scope creep, bloated epics |
 | **Derive, Then Work the Ready Set** | Hand-written task lists, unclear order |
+| **Separate the Roles** | Agents grading their own work |
+| **Close on Evidence** | A graph that reports claims instead of facts |
 
 ## What It Looks Like
 
@@ -49,14 +55,13 @@ Email-and-password signup, login, logout, and a session that persists across vis
 - No two-factor auth
 ```
 
-Hand it to the agent with one request:
-
+Hand it to the orchestrator with one request:
 > Break specs/001-user-authentication.md into atomic sub-issues. Respect the non-goals.
 
 It proposes a breakdown. Prune it, then materialize the result to GitHub in one pass. The epic is created first, then each task with its parent and its blocker set at creation:
 
 ```
-gh issue create --title "Epic: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
+gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
 gh issue create --title "User schema and password hashing"  --parent 1               --body-file .github/tasks/auth-02.md  # -> #2
 gh issue create --title "Signup endpoint and form"          --parent 1 --blocked-by 2 --body-file .github/tasks/auth-03.md  # -> #3
 gh issue create --title "Login and session persistence"     --parent 1 --blocked-by 2 --body-file .github/tasks/auth-04.md  # -> #4
@@ -66,18 +71,20 @@ gh issue create --title "Logout"                            --parent 1 --blocked
 GitHub now holds the whole plan. The epic shows its children and their order:
 
 ```
-#1  Epic: User authentication              [epic]
+#1  Epic 001: User authentication          [epic]
 ├─ #2  User schema and password hashing    ready
 ├─ #3  Signup endpoint and form            blocked by #2
 ├─ #4  Login and session persistence       blocked by #2
 └─ #5  Logout                              blocked by #4
 ```
 
-Only `#2` has no open blocker, so it is the single task ready to start. Close it, and `#3` and `#4` open up. Close `#4`, and `#5` follows. The spec stays in the repo as the record of intent. The issue graph runs the work, and the next task is always whatever has no open blocker.
+Before any code exists, the orchestrator turns each task's criteria into checks, committed as the first commit on its branch: `task/2` starts with `checks: #2`. You approve the checks with the breakdown. They are the contract, and no implementer may change them.
+
+Only `#2` has no open blocker, so it is the single task ready to start. An implementer works it on `task/2` and opens a PR that says `Closes #2`. GitHub runs the `gate` check, a reviewer that sees only the spec, the task, and the diff posts a `verdict`, and when both pass the PR merges and `#2` closes. `#3` and `#4` open up and can run in parallel. Merge `#4`, and `#5` follows. The spec stays in the repo as the record of intent. The issue graph runs the work, and every closed issue points to a merged PR and two passing checks.
 
 That is the whole method. The principles below explain why each move is shaped the way it is.
 
-## The Four Principles in Detail
+## The Six Principles in Detail
 
 ### 1. Spec First
 
@@ -86,7 +93,7 @@ That is the whole method. The principles below explain why each move is shaped t
 A spec records why an epic exists and what done looks like, and it stays out of the method. Agents reach for implementation detail early and bake decisions into a document meant to outlive them. A spec that records the outcome survives many implementations. A spec stuffed with steps rots on the first change of plan.
 
 - Keep it to a page — Why, What, Acceptance criteria, Non-goals
-- Write criteria as observable outcomes — the kind a test can check
+- Write criteria as observable outcomes — each one becomes a check before work starts
 - Leave the method to the implementer — the spec says what, not how
 - Commit it to the repo — it travels with the code and diffs cleanly
 
@@ -109,7 +116,7 @@ The breakdown lives as sub-issues under the epic. The order lives as blocking ed
 
 **The non-goals section does real work.**
 
-Every line under Non-goals stops a sub-issue from forming and keeps an agent inside the scope of the epic. In the example, "no password reset yet" is the only reason a reset task did not appear in the breakdown.
+Every line under Non-goals stops a sub-issue from forming and keeps an agent inside the scope of the epic. In the example, "no password reset yet" is the only reason a reset task did not appear in the breakdown. The reviewer reads the same fence, so it holds through review as well as derivation.
 
 - Name what the epic will not do, and where that work lives instead
 - Treat deferred scope as future epics, never as quiet additions to this one
@@ -119,29 +126,59 @@ Every line under Non-goals stops a sub-issue from forming and keeps an agent ins
 
 ### 4. Derive, Then Work the Ready Set
 
-**The model decomposes the spec. Work flows in unblocked order.**
+**The model decomposes the spec. A person approves. Work flows in unblocked order.**
 
-Hand-writing every substep wastes effort and over-specifies the how. The agent proposes atomic sub-issues from the spec, a person prunes them, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down.
+Hand-writing every substep wastes effort and over-specifies the how. The agent proposes atomic sub-issues and their checks, a person prunes and approves them, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down. Agents only ever work a graph a person has approved.
 
-- Derive sub-issues in plan mode, then review and cut before creating anything
-- Materialize in one pass, with parent and blocking edges set at creation
-- Start only issues with no open blockers, checking `blockedBy` first
+- Derive, then review and cut the breakdown and its checks together, before creating anything
+- Materialize in one pass, with parent, blocking edges, and checks set at creation
+- Start only issues with no open blockers
 - Record non-obvious choices as numbered files in `DECISIONS/`, such as `DECISIONS/001-use-session-cookies.md`, when a spec shifts mid-flight
 
 **The test:** Did the model write the substeps and a person approve them? If someone hand-wrote the task list, the spec was doing the agent's job.
+
+### 5. Separate the Roles
+
+**Whoever builds a change never approves it.**
+
+An agent that writes both the code and its tests can pass by testing what it built instead of what the spec asked for. Three roles keep building and judging apart, each defined by what it sees and what it may change, not by a persona.
+
+- Orchestrator — owns the graph: derives, materializes, writes the checks, dispatches ready work. Writes no implementation code. Its mechanical half can be plain code.
+- Implementer — one sub-issue, one branch. Cannot change the checks it must pass. Reports only what the checks cannot show: what it skipped and what it is unsure of.
+- Reviewer — sees only the spec, the sub-issue, and the diff, never the implementer's reasoning, so it is not anchored to the choices it judges. Rules on scope and non-goals; correctness is the gate's job.
+
+**The test:** Did any role approve work it produced? If yes, the roles have collapsed into one.
+
+### 6. Close on Evidence
+
+**An issue closes when a merged PR with passing checks closes it. Never by hand.**
+
+A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. Two required status checks guard the default branch: `gate` runs the tests and the mechanical guards, and `verdict` carries the reviewer's ruling. When both pass the PR merges, and `Closes #<n>` closes the issue.
+
+- Checks come before code, written by the orchestrator and approved by a person
+- Checks are fixed during the task; an implementer commit that touches one fails the gate
+- The gate is GitHub's status checks, never an agent's say-so
+- No manual closes; work that cannot pass stays open
+
+**The test:** Can every closed issue point to a merged PR, a passing `gate`, and a passing `verdict`? If one cannot, the graph is reporting a claim, not a fact.
 
 ## Why Lite
 
 A lighter convention earns its place three ways. It removes a moving part, since no state file means nothing to sync and nothing to drift. It puts the work where people already look, so status is visible to teammates and other tools with no translation step. And it shrinks what an agent must learn: read the spec for the goal, query the graph for what is ready, write a throwaway plan for each task.
 
+It is also cheap to run, by construction rather than by instruction. The cost that matters is cost per closed issue, and most of it is an agent learning the repository. Sessions are reused along chains of sequential work and started fresh only where the graph allows parallel work or a role needs independence.
+
+The roles and the gate add no tracker of their own. They use branches, pull requests, labels, and status checks GitHub already has, and they state authority and evidence rather than method, so they hold as models improve.
+
 Heavier frameworks add phases, validators, and harnesses, and those pay off at large scale. For a solo developer or a small team, a spec plus the issue graph covers the same ground with far less to carry.
 
 ## Install
 
-Copy the shared agent instructions into a project:
+Copy the shared agent instructions and the protected-paths list into a project:
 
 ```
 curl -o AGENTS.md https://raw.githubusercontent.com/branmora/spec-driven-github/main/AGENTS.md
+mkdir -p .github && curl -o .github/protected-paths https://raw.githubusercontent.com/branmora/spec-driven-github/main/.github/protected-paths
 ```
 
 If the project already has an `AGENTS.md`, add the convention there instead of replacing its existing instructions.
@@ -155,5 +192,7 @@ If the project already has an `AGENTS.md`, add the convention there instead of r
 ## Requirements
 
 A current `gh` with native `--parent` and `--blocked-by` support.
+
+A CI workflow that reports a `gate` status check, and branch protection that requires `gate` and `verdict` on the default branch.
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.

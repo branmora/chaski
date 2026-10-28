@@ -1,6 +1,6 @@
 # Example: one epic, end to end
 
-This is the full version of the user-authentication epic from the README, with the task bodies and the working queries. The shape is the same for any epic: write the spec, derive the breakdown, materialize it, work the ready set.
+This is the full version of the user-authentication epic from the README, with the task bodies, the checks, and the working queries. The shape is the same for any epic: write the spec, derive the breakdown, materialize it with its checks, work the ready set.
 
 ## 1. The spec
 
@@ -30,18 +30,18 @@ Email-and-password signup, login, logout, and a session that persists across vis
 
 ## 2. Derive
 
-Ask the agent in plan mode:
+Ask the orchestrator:
 
 > Break specs/001-user-authentication.md into atomic sub-issues. Respect the non-goals.
 
-Four tasks come back. The schema and hashing come first because signup and login both depend on it; logout depends on a session existing, so it follows login. Notice what the fence kept out: no reset task, no social-login task. Prune anything speculative before continuing.
+Four tasks come back. The schema and hashing come first because signup and login both depend on it; logout depends on a session existing, so it follows login. Notice what the fence kept out: no reset task, no social-login task. Prune anything speculative, and approve the breakdown before anything is created.
 
 ## 3. Materialize
 
 Create the epic, then the tasks in dependency order so every reference already exists. No organization here, so the epic uses a label:
 
 ```
-gh issue create --title "Epic: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
+gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
 gh issue create --title "User schema and password hashing"  --parent 1               --body-file .github/tasks/auth-02.md  # -> #2
 gh issue create --title "Signup endpoint and form"          --parent 1 --blocked-by 2 --body-file .github/tasks/auth-03.md  # -> #3
 gh issue create --title "Login and session persistence"     --parent 1 --blocked-by 2 --body-file .github/tasks/auth-04.md  # -> #4
@@ -60,22 +60,39 @@ Authenticate a returning user and keep them logged in across visits.
 - [ ] The session persists across browser restarts
 - [ ] Invalid credentials are rejected without revealing which field was wrong
 
+## Checks
+- tests/acceptance/test_login.py
+
 ## Non-goals
 - Does not handle signup (that is #3)
 - Does not handle logout (that is #5)
 ```
 
-## 4. The resulting graph
+## 4. The checks
+
+Each task gets its branch, and the branch's first commit holds the checks, one per criterion. They test what an observer would see, not how the code is built, so they leave the method open:
 
 ```
-#1  Epic: User authentication              [epic]
+git switch -c task/4 origin/main
+# tests/acceptance/test_login.py — one test per criterion of #4
+git add tests/acceptance/test_login.py
+git commit -m "checks: #4"
+git push -u origin task/4
+```
+
+Review the checks with the breakdown. Once approved they are fixed: an implementer commit that touches them fails the gate.
+
+## 5. The resulting graph
+
+```
+#1  Epic 001: User authentication          [epic]
 ├─ #2  User schema and password hashing    ready
 ├─ #3  Signup endpoint and form            blocked by #2
 ├─ #4  Login and session persistence       blocked by #2
 └─ #5  Logout                              blocked by #4
 ```
 
-## 5. Find ready work
+## 6. Find ready work
 
 Read the list of child issues, not the summary counter, which can freeze at the first sub-issue:
 
@@ -83,11 +100,39 @@ Read the list of child issues, not the summary counter, which can freeze at the 
 for n in $(gh issue view 1 --json subIssues -q '.subIssues[].number'); do
   blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy[] | select(.state=="OPEN")] | length')
   state=$(gh issue view "$n" --json state -q .state)
-  [ "$state" = "OPEN" ] && [ "$blockers" -eq 0 ] && echo "ready -> #$n"
+  held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
+  git ls-remote --exit-code --heads origin "task/$n" >/dev/null || continue
+  [ "$state" = "OPEN" ] && [ "$blockers" -eq 0 ] && [ "$held" = "false" ] && echo "ready -> #$n"
 done
 ```
 
-Early on this prints `#2` alone. Close it and run again: `#3` and `#4` are ready. Close `#4`: `#5` is ready. The queue is derived from the graph, never maintained by hand.
+Early on this prints `#2` alone. Merge it and run again: `#3` and `#4` are ready, and can run at once. Merge `#4`: `#5` is ready. The queue is derived from the graph, never maintained by hand.
+
+## 7. Work a task
+
+An implementer takes `#4` on `task/4`, builds until the checks pass, and opens a PR whose description is its report. The gate proves the criteria, so the report only says what the checks cannot:
+
+```
+Closes #4
+
+### Skipped
+- none
+
+### Unsure
+- Session lifetime set to 30 days; the spec names none
+```
+
+GitHub runs `gate`. A reviewer, shown only the spec, the sub-issue, and the diff, posts its verdict:
+
+```
+Verdict: pass
+
+Stays inside #4: no signup or logout code, no reset flow. The 30-day lifetime is a choice the spec leaves open.
+```
+
+Both checks pass, the PR merges, and `#4` closes. A failure gives the task one more attempt with what failed; a second failure parks it with `needs-human`.
+
+`#5` is blocked only by `#4`, so it is the next task in the chain: the session that built login continues to logout without rereading the codebase. `#3` sits on a branch of the graph, so a separate session takes it in parallel.
 
 ## Cross-epic dependencies
 
