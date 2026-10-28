@@ -1,0 +1,83 @@
+# The gate: tests on every PR and every push to the default branch, plus the
+# mechanical guards on task branches. Reports the required `gate` status check.
+name: sdd-gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ vars.DEFAULT_BRANCH || 'main' }}
+      IS_TASK: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'task/') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      # Scripts and the protected-paths list always come from the default branch,
+      # so a PR cannot change the guards that judge it.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .sdd-trusted
+          sparse-checkout: |
+            .github/sdd
+            .github/protected-paths
+          persist-credentials: false
+
+      - id: meta
+        if: env.IS_TASK == 'true'
+        run: |
+          echo "issue=${HEAD_REF#task/}" >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+
+      - name: Checks unchanged
+        id: guard
+        if: env.IS_TASK == 'true'
+        run: |
+          git fetch -q origin main
+          .sdd-trusted/.github/sdd/gate-checks.sh "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PROTECTED_FILE: .sdd-trusted/.github/protected-paths
+
+      - name: App token
+        id: token
+        if: env.IS_TASK == 'true' && steps.guard.outputs.protected != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.SDD_APP_ID }}
+          private-key: ${{ secrets.SDD_APP_PRIVATE_KEY }}
+
+      - name: Protected paths go to a person
+        if: steps.token.outcome == 'success'
+        run: |
+          source .sdd-trusted/.github/sdd/lib.sh
+          gh pr merge "$PR" --disable-auto || true
+          park "$ISSUE" "This PR touches protected paths: \`$PROTECTED\`. Only a person merges it."
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ github.event.pull_request.number }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          PROTECTED: ${{ steps.guard.outputs.protected }}
+
+      - name: Tests
+        run: |
+          if [ -z "$TEST_COMMAND" ]; then
+            echo "::error::Set the TEST_COMMAND repository variable to your test command."
+            exit 1
+          fi
+          bash -c "$TEST_COMMAND"
+        env:
+          TEST_COMMAND: ${{ vars.TEST_COMMAND }}

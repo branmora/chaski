@@ -1,0 +1,113 @@
+# The reviewer, on every task PR. Three jobs keep the role's boundary mechanical:
+#   prepare  builds a folder with only the spec, the sub-issue, and the diff
+#   review   runs the agent on that folder alone: no checkout, no GitHub token
+#   publish  posts the verdict and sets the required `verdict` status check
+name: sdd-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: startsWith(github.head_ref, 'task/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      issue: ${{ steps.meta.outputs.issue }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ vars.DEFAULT_BRANCH || 'main' }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .sdd-trusted
+          persist-credentials: false
+      - id: meta
+        run: echo "issue=${HEAD_REF#task/}" >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+      - id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.SDD_APP_ID }}
+          private-key: ${{ secrets.SDD_APP_PRIVATE_KEY }}
+      - run: .sdd-trusted/.github/sdd/review.sh prepare "$ISSUE" "$SHA" "$RUNNER_TEMP/review"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-in
+          path: ${{ runner.temp }}/review
+
+  review:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(vars.AGENT_TIMEOUT_MINUTES || '30') }}
+    env:
+      AGENT_CLI: ${{ vars.AGENT_CLI || 'claude' }}
+      AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+      AGENT_MAX_TURNS: ${{ vars.AGENT_MAX_TURNS || '40' }}
+      AGENT_MAX_BUDGET_USD: ${{ vars.AGENT_MAX_BUDGET_USD }}
+      AGENT_ARGS: ${{ vars.AGENT_ARGS }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: review-in
+          path: ${{ runner.temp }}/review
+      - run: bash "$RUNNER_TEMP/review/run-agent.sh" --install
+      - run: bash "$RUNNER_TEMP/review/run-agent.sh" reviewer "$RUNNER_TEMP/review/prompt.md" "$RUNNER_TEMP/review"
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-out
+          path: ${{ runner.temp }}/review/verdict.md
+          if-no-files-found: ignore
+
+  publish:
+    needs: [prepare, review]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ vars.DEFAULT_BRANCH || 'main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: review-out
+          path: ${{ runner.temp }}/review
+        continue-on-error: true
+      - id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.SDD_APP_ID }}
+          private-key: ${{ secrets.SDD_APP_PRIVATE_KEY }}
+      - id: publish
+        run: |
+          mkdir -p "$RUNNER_TEMP/review"
+          .github/sdd/review.sh publish "$ISSUE" "$PR" "$SHA" "$RUNNER_TEMP/review"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE: ${{ needs.prepare.outputs.issue }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}

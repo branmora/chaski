@@ -1,0 +1,129 @@
+# The loop: pick ready issues and start one implementer session per issue.
+# Each session works a chain: after its task merges, it continues to the next
+# task whose only blocker was that one, while it has context, time, and window.
+# Starts when the default branch goes green after a merge, when needs-human is
+# removed from an issue, on a schedule as a backstop, or by hand.
+# Does nothing unless the LOOP_ENABLED repository variable is "true".
+name: sdd-dispatch
+
+on:
+  workflow_run:
+    workflows: [sdd-gate]
+    types: [completed]
+    branches: [main]
+  issues:
+    types: [unlabeled]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Start this issue now (leave empty to pick from the ready set)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: >-
+      vars.LOOP_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')) &&
+      (github.event_name != 'issues' || github.event.label.name == 'needs-human')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sdd-plan
+      cancel-in-progress: false
+    outputs:
+      issues: ${{ steps.plan.outputs.issues }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ vars.DEFAULT_BRANCH || 'main' }}
+      LOOP_ENABLED: ${{ vars.LOOP_ENABLED }}
+      LOOP_WINDOW: ${{ vars.LOOP_WINDOW }}
+      LOOP_TZ: ${{ vars.LOOP_TZ || 'UTC' }}
+      LOOP_MAX_PARALLEL: ${{ vars.LOOP_MAX_PARALLEL || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.SDD_APP_ID }}
+          private-key: ${{ secrets.SDD_APP_PRIVATE_KEY }}
+      - id: plan
+        run: .github/sdd/dispatch.sh
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RUN_ISSUE: ${{ inputs.issue }}
+
+  implement:
+    needs: plan
+    if: needs.plan.outputs.issues != '' && needs.plan.outputs.issues != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(vars.CHAIN_TIMEOUT_MINUTES || '300') }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(vars.LOOP_MAX_PARALLEL || '2') }}
+      matrix:
+        issue: ${{ fromJSON(needs.plan.outputs.issues) }}
+    concurrency:
+      group: sdd-issue-${{ matrix.issue }}
+      cancel-in-progress: false
+    env:
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ vars.DEFAULT_BRANCH || 'main' }}
+      LOOP_WINDOW: ${{ vars.LOOP_WINDOW }}
+      LOOP_TZ: ${{ vars.LOOP_TZ || 'UTC' }}
+      TEST_COMMAND: ${{ vars.TEST_COMMAND }}
+      MERGE_METHOD: ${{ vars.MERGE_METHOD || 'squash' }}
+      CHAIN_MAX_TASKS: ${{ vars.CHAIN_MAX_TASKS || '5' }}
+      CHAIN_MAX_CONTEXT: ${{ vars.CHAIN_MAX_CONTEXT || '0.6' }}
+      CHAIN_TIMEOUT_MINUTES: ${{ vars.CHAIN_TIMEOUT_MINUTES || '300' }}
+      CHAIN_TASK_RESERVE_MINUTES: ${{ vars.CHAIN_TASK_RESERVE_MINUTES || '60' }}
+      WAIT_MINUTES: ${{ vars.WAIT_MINUTES || '45' }}
+      AGENT_CLI: ${{ vars.AGENT_CLI || 'claude' }}
+      AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+      AGENT_MAX_TURNS: ${{ vars.AGENT_MAX_TURNS || '80' }}
+      AGENT_MAX_BUDGET_USD: ${{ vars.AGENT_MAX_BUDGET_USD }}
+      AGENT_CONTEXT_WINDOW: ${{ vars.AGENT_CONTEXT_WINDOW }}
+      AGENT_ARGS: ${{ vars.AGENT_ARGS }}
+      # The script mints and refreshes its own App token; the agent never sees these.
+      SDD_APP_ID: ${{ vars.SDD_APP_ID }}
+      SDD_APP_PRIVATE_KEY: ${{ secrets.SDD_APP_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Run the default branch's scripts from outside the working tree, so
+      # switching to a task branch cannot change the code that is running.
+      - run: cp -r .github/sdd "$RUNNER_TEMP/sdd"
+
+      - run: bash "$RUNNER_TEMP/sdd/run-agent.sh" --install
+
+      - name: Implementer chain
+        run: bash "$RUNNER_TEMP/sdd/chain.sh" "$ISSUE"
+        env:
+          ISSUE: ${{ matrix.issue }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      # A crash or timeout must not leave an issue locked with nobody on it.
+      - name: Hand an unfinished task to a person
+        if: failure() || cancelled()
+        run: |
+          source "$RUNNER_TEMP/sdd/lib.sh"
+          f="$RUNNER_TEMP/sdd-chain/current-issue"
+          [ -s "$f" ] || exit 0
+          n=$(cat "$f")
+          refresh_token
+          has_label "$n" needs-human && exit 0
+          park "$n" "The implementer run ended before this task finished ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})). Remove \`needs-human\` to try again."

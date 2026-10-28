@@ -1,6 +1,6 @@
 # Spec-Driven Development on GitHub
 
-Run each epic from a short spec. GitHub's issue graph holds the breakdown, the order, and the state. Separate roles build, check, and merge the work, and every merge rests on evidence.
+Run each epic from a short spec. GitHub's issue graph holds the breakdown, the order, and the state. Separate roles build, check, and merge the work, and every merge rests on evidence, so the same rules hold whether a person is steering or the work runs unattended.
 
 ## The Six Principles
 
@@ -53,7 +53,7 @@ Each line under Non-goals stops a sub-issue from forming and keeps an agent insi
 
 **The model breaks down the spec. A person approves it. The graph says what is next.**
 
-Hand-writing every substep over-specifies the how. Let the agent propose atomic sub-issues and their checks; a person prunes and approves both in one review, before anything is created. Agents only ever work a graph, and checks, a person has approved.
+Hand-writing every substep over-specifies the how. Let the agent propose atomic sub-issues and their checks; a person prunes and approves both in one review, before anything is created. Work that runs unattended only ever works a graph, and checks, a person has approved.
 
 - Materialize in one pass — parent, blocking edges, and checks set at creation
 - Start only ready issues — GitHub serves a blocked issue without complaint
@@ -91,7 +91,7 @@ A closed issue is the graph saying the work is done, so the claim needs proof th
 1. A person writes `specs/<number>-<name>.md` from the template below.
 2. The orchestrator derives atomic sub-issues and their checks, respecting the non-goals; a person approves both.
 3. The orchestrator materializes the breakdown in one pass: the issues, their blocking edges, and a `task/<n>` branch per issue whose first commit holds its checks.
-4. Each ready issue goes to an implementer, dispatched by the orchestrator. Ready issues run in parallel; when a task merges and is the only blocker of the next, the same session continues the chain.
+4. Each ready issue goes to an implementer, dispatched by the orchestrator or by the loop in `automation/`. Ready issues run in parallel; when a task merges and is the only blocker of the next, the same session continues the chain.
 5. The implementer opens a PR with its report; a reviewer gives a verdict.
 6. The PR merges when `gate` and `verdict` pass, and the merge closes the issue. The ready set changes, and the loop repeats.
 7. A person closes the epic once its sub-issues are closed.
@@ -99,7 +99,7 @@ A closed issue is the graph saying the work is done, so the claim needs proof th
 
 ## Names
 
-Every role and every tool reads the same names.
+Every role and every tool reads the same names, whether a person or a workflow runs the loop.
 
 | Name | Meaning |
 | --- | --- |
@@ -199,7 +199,7 @@ A parked issue leaves the ready set; the rest of the graph keeps moving. A perso
 
 ## Guardrails
 
-Agents act with the identity of the person who runs them, so the limits live here, in the harness, and in the token, not in GitHub approvals.
+Agents act with the identity of whoever runs them — a person when steered, the project's GitHub App when unattended — so the limits live here, in the harness, and in the token, not in GitHub approvals.
 
 - Everything through a PR — agents never push to the default branch directly
 - Protected paths — a PR whose implementer commits touch a path listed in `.github/protected-paths` gets `needs-human`, and only a person merges it

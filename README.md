@@ -1,6 +1,6 @@
 # Spec-Driven Development on GitHub
 
-A single convention for running spec-driven development on GitHub's native issue features. One short spec per epic. The issue graph carries the breakdown, the order, and the state. Separate roles build and check the work, and every merge rests on evidence.
+A single convention for running spec-driven development on GitHub's native issue features. One short spec per epic. The issue graph carries the breakdown, the order, and the state. Separate roles build and check the work, and every merge rests on evidence, so it can run while you steer or while you sleep.
 
 ## The Problem
 
@@ -128,7 +128,7 @@ Every line under Non-goals stops a sub-issue from forming and keeps an agent ins
 
 **The model decomposes the spec. A person approves. Work flows in unblocked order.**
 
-Hand-writing every substep wastes effort and over-specifies the how. The agent proposes atomic sub-issues and their checks, a person prunes and approves them, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down. Agents only ever work a graph a person has approved.
+Hand-writing every substep wastes effort and over-specifies the how. The agent proposes atomic sub-issues and their checks, a person prunes and approves them, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down. Work that runs unattended only ever works a graph a person has approved.
 
 - Derive, then review and cut the breakdown and its checks together, before creating anything
 - Materialize in one pass, with parent, blocking edges, and checks set at creation
@@ -162,11 +162,17 @@ A closed issue is the graph saying the work is done, so the claim needs proof th
 
 **The test:** Can every closed issue point to a merged PR, a passing `gate`, and a passing `verdict`? If one cannot, the graph is reporting a claim, not a fact.
 
+## Running Unattended
+
+The same rules run without you. [`automation/`](automation/) holds GitHub Actions templates that work the ready set overnight: a merge to the default branch starts the next dispatch, each ready issue starts an implementer session, and every PR gets the gate and a reviewer. A session that finishes a task continues to the next one in its chain, so sequential work does not pay to relearn the repository; parallel sessions start only where the graph branches. Agents act as the project's GitHub App, never hold GitHub credentials themselves, and park anything ambiguous with `needs-human`. You come back to closed issues with evidence attached and a short list of questions.
+
+Two of the three workflows run whether you steer or not: the gate and the reviewer are what produce `gate` and `verdict` on every task PR. Only the dispatch loop is optional, switched on with one repository variable.
+
 ## Why Lite
 
 A lighter convention earns its place three ways. It removes a moving part, since no state file means nothing to sync and nothing to drift. It puts the work where people already look, so status is visible to teammates and other tools with no translation step. And it shrinks what an agent must learn: read the spec for the goal, query the graph for what is ready, write a throwaway plan for each task.
 
-It is also cheap to run, by construction rather than by instruction. The cost that matters is cost per closed issue, and most of it is an agent learning the repository. Sessions are reused along chains of sequential work and started fresh only where the graph allows parallel work or a role needs independence.
+It is also cheap to run, by construction rather than by instruction. The cost that matters is cost per closed issue, and most of it is an agent learning the repository. Sessions are reused along chains of sequential work and started fresh only where the graph allows parallel work or a role needs independence, and each PR records what its task cost.
 
 The roles and the gate add no tracker of their own. They use branches, pull requests, labels, and status checks GitHub already has, and they state authority and evidence rather than method, so they hold as models improve.
 
@@ -189,10 +195,12 @@ If the project already has an `AGENTS.md`, add the convention there instead of r
 @AGENTS.md
 ```
 
+To run it unattended, follow [`automation/README.md`](automation/README.md).
+
 ## Requirements
 
 A current `gh` with native `--parent` and `--blocked-by` support.
 
-A CI workflow that reports a `gate` status check, and branch protection that requires `gate` and `verdict` on the default branch.
+A CI workflow that reports a `gate` status check, and branch protection that requires `gate` and `verdict` on the default branch. `automation/` provides both.
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.
