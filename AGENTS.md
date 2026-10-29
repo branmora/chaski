@@ -65,7 +65,7 @@ Hand-writing every substep over-specifies the how. Let the agent propose atomic 
 
 **Whoever builds a change never approves it.**
 
-An agent that writes both the code and its checks can pass by testing what it built instead of what the spec asked for. Split the work into three roles, each defined by what it sees and what it may change. A role is a boundary, not a persona. A session is a cache, not a role: an implementer may carry what it learned along its chain, but a reviewer always starts fresh, because its independence is the point.
+An agent that writes both the code and its checks can pass by testing what it built instead of what the spec asked for. Split the work into three roles, each defined by what it sees and what it may change. A role is a boundary, not a persona. A session is a cache, not a role: an implementer may carry what it learned along its chain, but a reviewer always starts fresh, because its independence is the point. A cache only pays while it is warm, so no role idles to keep one alive.
 
 - Orchestrator — owns the graph: derives, materializes, writes the checks, dispatches ready issues, and sets `verdict` from the reviewer's first line, never rewording it. Writes no implementation code; its mechanical parts may run as plain code.
 - Implementer — works one sub-issue at a time on its task branch. Sees the spec, the sub-issue, and the code. Never edits the checks. Opens its PR with the report below.
@@ -107,6 +107,7 @@ Approval of the breakdown is the last answer the orchestrator waits for. From th
 - Minor decision — decide, say so in one line, and continue; list it in the final report
 - Real decision — park it with `needs-human`, on the sub-issue or the epic, as in Asking for a Person; never wait on chat for it
 - The person may ask or steer at any time — status comes from the graph, and a steer that changes the plan is written to the issue it affects
+- Long work runs detached — a role that starts a process likely to outlast its session's cache detaches it with its output in a log, posts `Waiting: <command> → <log>` on the sub-issue, and ends its turn. The orchestrator watches for the exit line, never the log's contents, and resumes that role once. A nonzero exit counts as a failed attempt
 - Stop when the ready set is empty, then report once: what merged, what is parked and why, and the minor decisions taken
 
 A decision is minor when a person would be fine learning of it afterward.
@@ -126,6 +127,7 @@ Every role and every tool reads the same names.
 | `tests/acceptance/` | Checks path, unless the project names another |
 | `in-progress` | Issue dispatched; nothing else takes it |
 | `needs-human` | Issue parked for a person; it leaves the ready set |
+| `Waiting: <command> → <log>` | Comment on a sub-issue whose role is waiting on detached work; the issue keeps `in-progress` |
 | `gate` | Required status check: the tests and the mechanical guards |
 | `verdict` | Required status check the orchestrator sets from the reviewer's verdict |
 | `Verdict: pass` / `Verdict: fail — <reason>` | First line of the reviewer's verdict, posted on the PR |
@@ -186,6 +188,8 @@ for n in $(gh issue view <epic#> --json subIssues -q '.subIssues[].number'); do
   [ "$state" = "OPEN" ] && [ "$blockers" -eq 0 ] && [ "$held" = "false" ] && echo "ready -> #$n"
 done
 ```
+
+`in-progress` holds only while the session that set it is alive. A new orchestrator session first reads the issues that carry `in-progress`. One whose last comment is `Waiting:` gets its watch back, or is resumed if the log already ends. Any other returns to the ready set: remove `in-progress`; the task branch keeps whatever was pushed.
 
 ## Implementer Report
 
