@@ -67,7 +67,7 @@ Hand-writing every substep over-specifies the how. Let the agent propose atomic 
 
 An agent that writes both the code and its checks can pass by testing what it built instead of what the spec asked for. Split the work into three roles, each defined by what it sees and what it may change. A role is a boundary, not a persona. A session is a cache, not a role: an implementer may carry what it learned along its chain, but a reviewer always starts fresh, because its independence is the point.
 
-- Orchestrator — owns the graph: derives, materializes, writes the checks, dispatches ready issues. Writes no implementation code; its mechanical parts may run as plain code.
+- Orchestrator — owns the graph: derives, materializes, writes the checks, dispatches ready issues, and sets `verdict` from the reviewer's first line, never rewording it. Writes no implementation code; its mechanical parts may run as plain code.
 - Implementer — works one sub-issue at a time on its task branch. Sees the spec, the sub-issue, and the code. Never edits the checks. Opens its PR with the report below.
 - Reviewer — sees only the spec, the sub-issue, and the diff, never the PR description or the implementer's reasoning. Gives a verdict on scope and non-goals.
 
@@ -77,7 +77,7 @@ An agent that writes both the code and its checks can pass by testing what it bu
 
 **An issue closes when a merged PR with passing checks closes it. Never by hand.**
 
-A closed issue is the graph saying the work is done, so the claim needs proof that does not depend on an agent's report. The implementer's PR says `Closes #<n>` and merges into the default branch only when the `gate` and `verdict` status checks both pass; the merge closes the issue.
+A closed issue is the graph saying the work is done, so the claim needs proof that does not depend on an agent's report. The implementer's PR says `Closes #<n>` and has auto-merge enabled when it opens, so GitHub merges it into the default branch once the `gate` and `verdict` status checks both pass, and the merge closes the issue. No agent decides when to merge.
 
 - Checks come before code — written from the criteria by the orchestrator, as the task branch's `checks: #<n>` commit, never on the default branch
 - Checks are fixed during the task — no implementer commit touches a file the checks commit added
@@ -89,13 +89,29 @@ A closed issue is the graph saying the work is done, so the claim needs proof th
 ## The Loop
 
 1. A person writes `specs/<number>-<name>.md` from the template below.
-2. The orchestrator derives atomic sub-issues and their checks, respecting the non-goals; a person approves both.
+2. The orchestrator derives atomic sub-issues and their checks, respecting the non-goals, and asks whatever it needs to; a person approves both.
 3. The orchestrator materializes the breakdown in one pass: the issues, their blocking edges, and a `task/<n>` branch per issue whose first commit holds its checks.
 4. Each ready issue goes to an implementer, dispatched by the orchestrator or by the loop in `automation/`. Ready issues run in parallel; when a task merges and is the only blocker of the next, the same session continues the chain.
 5. The implementer opens a PR with its report; a reviewer gives a verdict.
-6. The PR merges when `gate` and `verdict` pass, and the merge closes the issue. The ready set changes, and the loop repeats.
+6. GitHub auto-merges the PR when `gate` and `verdict` pass, and the merge closes the issue. The ready set changes, and the loop repeats.
 7. A person closes the epic once its sub-issues are closed.
 8. Record non-obvious choices in `DECISIONS/<number>-<name>.md`, such as `DECISIONS/001-use-session-cookies.md`.
+
+## Running the Loop
+
+Before approval, ask freely. While the spec is written and the breakdown derived, clarifying questions are the work: each answer settled then is an issue not parked later.
+
+Approval of the breakdown is the last answer the orchestrator waits for. From then on it runs the loop, and the session stays open for the person. Unattended, the workflows in `automation/` run it the same way, with no chat: real decisions park, and the parked issues are the report.
+
+- Authorized without asking — push `task/<n>` branches, dispatch implementers and reviewers, add and remove `in-progress` and `needs-human`, open PRs, set `verdict`, enable auto-merge
+- Minor decision — decide, say so in one line, and continue; list it in the final report
+- Real decision — park it with `needs-human`, on the sub-issue or the epic, as in Asking for a Person; never wait on chat for it
+- The person may ask or steer at any time — status comes from the graph, and a steer that changes the plan is written to the issue it affects
+- Stop when the ready set is empty, then report once: what merged, what is parked and why, and the minor decisions taken
+
+A decision is minor when a person would be fine learning of it afterward.
+
+**The test:** Did the orchestrator ever stop to wait for a chat reply after approval? If yes, a decision escaped the graph.
 
 ## Names
 
@@ -111,7 +127,7 @@ Every role and every tool reads the same names, whether a person or a workflow r
 | `in-progress` | Issue dispatched; nothing else takes it |
 | `needs-human` | Issue parked for a person; it leaves the ready set |
 | `gate` | Required status check: the tests and the mechanical guards |
-| `verdict` | Required status check set from the reviewer's verdict |
+| `verdict` | Required status check the orchestrator, or the review workflow in `automation/`, sets from the reviewer's verdict |
 | `Verdict: pass` / `Verdict: fail — <reason>` | First line of the reviewer's verdict, posted on the PR |
 | `.github/protected-paths` | Paths whose changes only a person merges |
 
@@ -187,9 +203,22 @@ Closes #<n>
 
 Empty sections stay, marked `none`.
 
+Open the PR with auto-merge enabled, unless it touches a protected path:
+
+```
+gh pr create --base main --head task/<n> --title "<task>" --body-file <report>
+gh pr merge task/<n> --auto --squash
+```
+
+The orchestrator sets `verdict` on the PR's head commit from the reviewer's first line; unattended, `automation/` opens the PR and sets `verdict` itself:
+
+```
+gh api repos/{owner}/{repo}/statuses/<sha> -f context=verdict -f state=success   # or state=failure
+```
+
 ## Asking for a Person
 
-An agent never waits for an answer. It either decides or parks the issue.
+Once the breakdown is approved, an agent never waits for an answer. It either decides or parks the issue.
 
 - Minor ambiguity — choose the most reasonable reading, record it under Unsure, continue
 - Real ambiguity — the spec contradicts itself, the work would cross a non-goal, the choice is a person's to make, or the action cannot be undone. Put the question on the sub-issue, add `needs-human`, and stop work on that issue
@@ -202,6 +231,6 @@ A parked issue leaves the ready set; the rest of the graph keeps moving. A perso
 Agents act with the identity of whoever runs them — a person when steered, the project's GitHub App when unattended — so the limits live here, in the harness, and in the token, not in GitHub approvals.
 
 - Everything through a PR — agents never push to the default branch directly
-- Protected paths — a PR whose implementer commits touch a path listed in `.github/protected-paths` gets `needs-human`, and only a person merges it
+- Protected paths — a PR whose implementer commits touch a path listed in `.github/protected-paths` gets `needs-human` and no auto-merge, and only a person merges it
 - No widening — an agent never adds secrets, raises CI permissions, or edits branch protection
-- Nothing outside the repo that cannot be undone — agents do not deploy, publish, or change external systems; those stay with a person
+- Nothing outside the repo that cannot be undone — agents do not deploy, publish, or change external systems; those stay with a person. Branches, PRs, labels, comments, and merges through the gate count as inside the repo
