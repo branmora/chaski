@@ -153,7 +153,7 @@ An agent that writes both the code and its tests can pass by testing what it bui
 
 **An issue closes when a merged PR with passing checks closes it. Never by hand.**
 
-A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. Two required status checks guard the default branch: `gate` runs the tests and the mechanical guards, and `verdict` carries the reviewer's ruling. When both pass the PR merges, and `Closes #<n>` closes the issue.
+A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. Two required status checks guard the default branch: `gate` runs the tests and the mechanical guards, and `verdict` carries the reviewer's ruling. Each PR opens with auto-merge enabled, so when both pass GitHub merges it, not an agent, and `Closes #<n>` closes the issue.
 
 - Checks come before code, written by the orchestrator and approved by a person
 - Checks are fixed during the task; an implementer commit that touches one fails the gate
@@ -193,6 +193,6 @@ If the project already has an `AGENTS.md`, add the convention there instead of r
 
 A current `gh` with native `--parent` and `--blocked-by` support.
 
-A CI workflow that reports a `gate` status check, and branch protection that requires `gate` and `verdict` on the default branch.
+A CI workflow that reports a `gate` status check, branch protection that requires `gate` and `verdict` on the default branch, and auto-merge allowed in the repository settings.
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.
