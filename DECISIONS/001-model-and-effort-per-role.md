@@ -1,7 +1,7 @@
 # 001 — Model and effort per role
 
 Status: Accepted · 2026-10-29
-Snapshot: branched from `main` at `febc7d8`; this choice dates as models ship.
+Snapshot: branched from `main` at `febc7d8`; reviewed against the autonomous run (#5), only the orchestrator's reasons changed. This choice dates as models ship.
 
 ## Decision
 
@@ -21,8 +21,8 @@ The orchestrator is the main session, so its model and effort are set in the ses
 
 - Opus for every role that writes or judges, for reliability on code and facts.
 - An implementer's chain stays on one model, because a cache does not carry across models. The reviewer starts fresh, so for it the reason is quality, not cache.
-- Effort is set per role and never changed mid-session. With dispatch scripted, the orchestrator's remaining turns need judgment, not speed.
-- The implementer needs 1h because subagents default to 5m. A chain waits on `gate` and `verdict` between tasks, and detached work resumes the implementer once it finishes; any resume within the hour reads a warm cache.
+- Effort is set per role and never changed mid-session. With dispatch scripted, the orchestrator's remaining turns need judgment, not speed: it makes the run's decisions, derives epics without review, and handles repeated failures.
+- The implementer needs 1h because subagents default to 5m. A chain waits on `gate` and the reviewer's verdict between tasks, and detached work resumes the implementer once it finishes; any resume within the hour reads a warm cache.
 - 1h costs 2x base input on every cache write instead of 1.25x. It pays off when waits before a resume fall between 5 and 60 minutes, and is wasted on shorter waits, on waits over an hour, and on implementers never resumed.
 - Explore is search, not judgment, so Haiku.
 
@@ -37,7 +37,7 @@ The orchestrator is the main session, so its model and effort are set in the ses
 - Sonnet for isolated tasks: cheaper, but weaker on code and facts; one retry erases the saving.
 - A different model for the reviewer: less correlated blind spots, but weaker judgment on scope.
 - Raising effort on retry: not documented for resumed subagents.
-- Lowering orchestrator effort after approval: small saving once dispatch is scripted, and one more manual step to forget.
+- Lowering orchestrator effort after approval: approval comes before nearly the whole run, so it would lower effort where the judgment is.
 - Separate implementer files by TTL: whether 1h pays off depends on how long each wait before a resume lasts, which is rarely known when the implementer starts.
 
 ## Revisit when
