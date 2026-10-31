@@ -95,8 +95,9 @@ The checks are fixed for the implementer: an implementer commit that touches the
 Read the list of child issues, not the summary counter:
 
 ```
-for n in $(gh issue view 1 --json subIssues -q '.subIssues[].number'); do
-  blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy[] | select(.state=="OPEN")] | length')
+subs=$(gh issue view 1 --json subIssues -q 'if .subIssues.totalCount > (.subIssues.nodes | length) then error("sub-issue list is cut off") else .subIssues.nodes[].number end') || { echo "cannot read sub-issues of #1" >&2; exit 1; }
+for n in $subs; do
+  blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy.nodes[] | select(.state=="OPEN")] | length')
   state=$(gh issue view "$n" --json state -q .state)
   held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
   git ls-remote --exit-code --heads origin "task/$n" >/dev/null || continue
