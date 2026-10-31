@@ -1,4 +1,4 @@
-# Spec-Driven Development on GitHub
+# chaski — spec-driven development on GitHub
 
 Run each epic from a short spec. A person shapes and approves the specs up front; from then on the orchestrator runs the work autonomously. GitHub's issue graph holds the breakdown, the order, and the state. Separate roles build, check, and merge the work, and every merge rests on evidence.
 
