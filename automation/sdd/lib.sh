@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for the spec-driven-github loop. Sourced by the other scripts.
+# Shared helpers for the chaski loop. Sourced by the other scripts.
 # Every name used here is defined in the Names table of AGENTS.md.
 
 set -euo pipefail

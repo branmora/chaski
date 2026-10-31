@@ -75,9 +75,9 @@ From the root of your project, with this repository checked out next to it:
 
 ```
 mkdir -p .github/workflows
-cp ../spec-driven-github/automation/workflows/*.yml .github/workflows/
-cp -r ../spec-driven-github/automation/sdd .github/sdd
-cp ../spec-driven-github/.github/protected-paths .github/protected-paths   # if not already there
+cp ../chaski/automation/workflows/*.yml .github/workflows/
+cp -r ../chaski/automation/sdd .github/sdd
+cp ../chaski/.github/protected-paths .github/protected-paths   # if not already there
 chmod +x .github/sdd/*.sh
 ```
 
