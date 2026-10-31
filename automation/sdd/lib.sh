@@ -32,17 +32,9 @@ find_check_commit() {
   git log --format=%H --grep="^checks: #$1\$" "origin/$DEFAULT_BRANCH..HEAD" | tail -n 1
 }
 
-# Commits the implementer made: after the checks commit, not merges, not from main.
-implementer_commits() {
-  git rev-list --no-merges "$1..HEAD" "^origin/$DEFAULT_BRANCH"
-}
-
-# Commit shas on stdin -> unique list of files they touch.
-files_in_commits() {
-  local c
-  while read -r c; do
-    [ -n "$c" ] && git diff-tree --no-commit-id --name-only -r "$c"
-  done | sort -u
+# Files changed by commits on HEAD since the default branch, not merges. Extra args filter the commits.
+files_since_default() {
+  git log "origin/$DEFAULT_BRANCH..HEAD" --no-merges --no-renames --format= --name-only "$@" | sed '/^$/d' | sort -u
 }
 
 # 0 if the path is listed in .github/protected-paths.
@@ -60,6 +52,18 @@ is_protected() {
     fi
   done < "$PROTECTED_FILE"
   return 1
+}
+
+# Sub-issue numbers of an epic; fails when the list is cut off.
+sub_issues() {
+  gh issue view "$1" --json subIssues \
+    -q 'if .subIssues.totalCount > (.subIssues.nodes | length) then error("sub-issue list is cut off") else .subIssues.nodes[].number end'
+}
+
+# "true" when the issue is open, has no open blocker, and is not held; fails when its blocker list is cut off.
+ready_state() {
+  gh issue view "$1" --json state,labels,blockedBy \
+    -q 'if .blockedBy.totalCount > (.blockedBy.nodes | length) then error("blocker list is cut off") else .state == "OPEN" and all(.blockedBy.nodes[]; .state != "OPEN") and all(.labels[]; .name != "needs-human" and .name != "in-progress") end'
 }
 
 has_label() {

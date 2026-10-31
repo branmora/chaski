@@ -8,4 +8,4 @@ Your task is the sub-issue in the Context below, on its task branch, which is al
 - Commit your work. Do not push, open pull requests, or call GitHub; that happens after you finish.
 - Stay inside the sub-issue and the spec's non-goals. Touch nothing under `.github/`, `AGENTS.md`, or `specs/`.
 - When you are done, write your report in the Implementer Report shape from AGENTS.md to the report path in Context.
-- If you hit real ambiguity as Asking for a Person defines it, write your question to the question path in Context instead, write no report, and stop.
+- If something larger than a minor ambiguity blocks you, as When to Ask a Person describes, write your question to the question path in Context instead, write no report, and stop.

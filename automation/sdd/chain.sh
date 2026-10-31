@@ -166,19 +166,18 @@ failure_details() { # <pr> <gate|verdict>
 
 # The single next task in the chain, if there is exactly one. -> prints n or nothing
 next_in_chain() { # <n>
-  local n="$1" epic m found="" count=0 all open held
+  local n="$1" epic subs m found="" count=0 all
   epic=$(issue_context "$n" | jq -r '.parent.number // empty')
   [ -n "$epic" ] || return 0
-  for m in $(gh issue view "$epic" --json subIssues -q '.subIssues[].number'); do
-    [ "$(gh issue view "$m" --json state -q .state)" = "OPEN" ] || continue
-    all=$(gh issue view "$m" --json blockedBy -q '[.blockedBy[].number] | map(tostring) | join(",")')
+  subs=$(sub_issues "$epic") || return 0
+  for m in $subs; do
+    all=$(gh issue view "$m" --json state,blockedBy \
+      -q 'if .blockedBy.totalCount > (.blockedBy.nodes | length) then error("blocker list is cut off") elif .state != "OPEN" then "" else [.blockedBy.nodes[].number | tostring] | join(",") end') || return 0
     if [ "$all" = "$n" ]; then found="$m"; count=$((count + 1)); fi
   done
   # More than one successor means the graph branches: the chain ends, dispatch takes them.
   [ "$count" -eq 1 ] || return 0
-  open=$(gh issue view "$found" --json blockedBy -q '[.blockedBy[] | select(.state=="OPEN")] | length')
-  held=$(gh issue view "$found" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
-  [ "$open" -eq 0 ] && [ "$held" = "false" ] || return 0
+  [ "$(ready_state "$found")" = "true" ] || return 0
   git_auth ls-remote --exit-code --heads "https://github.com/$GH_REPO.git" "task/$found" >/dev/null || return 0
   echo "$found"
 }

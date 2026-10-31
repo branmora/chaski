@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The mechanical guards of the gate, for task branches.
-#   - Fails if an implementer commit touched a file the checks commit added.
+#   - Fails if a commit other than a `checks: #<n>` commit touched a file a checks commit changed.
 #   - Lists implementer-touched protected paths in the `protected` output.
 # Usage: gate-checks.sh <task-branch>
 # Env: GITHUB_OUTPUT
@@ -9,11 +9,10 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
 n=$(issue_from_branch "$1")
-check=$(find_check_commit "$n")
-[ -n "$check" ] || die "no 'checks: #$n' commit on task/$n; the checks must be the branch's first commit"
-
-check_files=$(git diff-tree --no-commit-id --name-only -r "$check" | sort -u)
-changed=$(implementer_commits "$check" | files_in_commits)
+g="^checks: #$n\$"
+check_files=$(files_since_default --grep="$g")
+[ -n "$check_files" ] || die "no 'checks: #$n' commit on task/$n; the checks must be the branch's first commit"
+changed=$(files_since_default --invert-grep --grep="$g")
 
 touched_checks=$(comm -12 <(printf '%s\n' "$check_files") <(printf '%s\n' "$changed") | sed '/^$/d' || true)
 

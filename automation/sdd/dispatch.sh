@@ -39,14 +39,11 @@ slots=$((max - busy))
 
 picked=()
 for epic in $(gh issue list --label epic --state open --limit 200 --json number -q '.[].number'); do
-  for n in $(gh issue view "$epic" --json subIssues -q '.subIssues[].number'); do
+  subs=$(sub_issues "$epic") || die "cannot read sub-issues of #$epic"
+  for n in $subs; do
     [ "${#picked[@]}" -ge "$slots" ] && break 2
-    state=$(gh issue view "$n" --json state -q .state)
-    [ "$state" = "OPEN" ] || continue
-    blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy[] | select(.state=="OPEN")] | length')
-    [ "$blockers" -eq 0 ] || continue
-    held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
-    [ "$held" = "false" ] || continue
+    ready=$(ready_state "$n") || die "cannot read #$n"
+    [ "$ready" = "true" ] || continue
     if ! git_auth ls-remote --exit-code --heads "https://github.com/$GH_REPO.git" "task/$n" >/dev/null; then
       park "$n" "No \`task/$n\` branch with checks yet. Commit the checks for this issue as the branch's first commit (\`checks: #$n\`), then remove \`needs-human\`."
       continue

@@ -132,6 +132,8 @@ Every role and every tool reads the same names, whether a person or a workflow r
 | `Waiting: <command> → <log>` | Comment on a sub-issue whose role is waiting on detached work; the issue keeps `in-progress` |
 | `gate` | Status check from CI that runs the tests |
 | `Verdict: pass` / `Verdict: fail — <reason>` | First line of the reviewer's verdict, posted on the PR |
+| `verdict` | Status check the review workflow sets from the reviewer's verdict, when running unattended |
+| `.github/protected-paths` | Paths whose changes only a person merges, when running unattended |
 
 ## Spec Template
 
@@ -250,3 +252,17 @@ Agents act with the identity of the person who runs them, so the limits live her
 - Everything through a PR — agents never push to the default branch directly
 - No widening — an agent never adds secrets, raises CI permissions, or edits branch protection
 - Nothing outside the repo that cannot be undone — agents do not deploy, publish, or change external systems; those stay with a person. Branches, PRs, labels, comments, merges on evidence, and closing epics count as inside the repo
+
+## Running Unattended
+
+The workflows in `automation/` run the same loop with no session open. They work only issues that already have their `task/<n>` branch and checks; deriving and materializing stay with an orchestrator session. What changes:
+
+- GitHub merges, not the orchestrator — each task PR opens with auto-merge, and branch protection requires `gate` and `verdict`
+- `verdict` is a status check the review workflow sets from the reviewer's first line, never reworded
+- The checks guard from Merging runs inside `gate`
+- A PR whose implementer commits touch a path in `.github/protected-paths` gets `needs-human` and no auto-merge; only a person merges it
+- Agents act as the project's GitHub App, never with a person's credentials
+- An implementer blocked by more than a minor ambiguity writes its question instead of a report, and the workflow parks the issue with it
+- Epics stay open until an orchestrator session or a person closes them
+
+Setup is in `automation/README.md`.

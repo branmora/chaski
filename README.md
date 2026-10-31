@@ -169,7 +169,7 @@ Two of the three workflows run whether you steer or not: the gate and the review
 
 A lighter convention earns its place three ways. It removes a moving part, since no state file means nothing to sync and nothing to drift. It puts the work where people already look, so status is visible to teammates and other tools with no translation step. And it shrinks what an agent must learn: read the spec for the goal, query the graph for what is ready, write a throwaway plan for each task.
 
-It is also cheap to run, by construction rather than by instruction. The cost that matters is cost per closed issue, and most of it is an agent learning the repository. Sessions are reused along chains of sequential work and started fresh only where the graph allows parallel work or a role needs independence, and each PR records what its task cost.
+It is also cheap to run, by construction rather than by instruction. The cost that matters is cost per closed issue, and most of it is an agent learning the repository. Sessions are reused along chains of sequential work and started fresh only where the graph allows parallel work or a role needs independence.
 
 The roles and the gate add no tracker of their own. They use branches, pull requests, labels, and status checks GitHub already has, and they state authority and evidence rather than method, so they hold as models improve.
 

@@ -34,7 +34,7 @@ merge to main ──► sdd-gate on main ──green──► sdd-dispatch
 | `sdd/dispatch.sh`, `review.sh`, `gate-checks.sh`, `lib.sh` | Dispatch, reviewer plumbing, gate guards, shared helpers |
 | `sdd/prompts/*.md` | Thin role prompts; the rules live in AGENTS.md |
 
-Nothing here writes the checks or approves a breakdown. That stays with a person, during the day: the loop only works graphs, and checks, you have approved.
+Nothing here derives epics or writes checks. That stays with an orchestrator session, working from specs a person approved: the loop only works issues whose `task/<n>` branch and checks already exist.
 
 ## Chains: why sessions are reused
 
@@ -157,7 +157,7 @@ Then Settings → General → allow auto-merge.
 
 ### 6. Turn it on
 
-Approve a breakdown and its checks during the day, as AGENTS.md describes. Set `LOOP_ENABLED` to `true`, and optionally `LOOP_WINDOW`. Start a first run from the Actions tab with **sdd-dispatch → Run workflow**, or wait for the next merge or the hourly backstop.
+Approve specs and let an orchestrator session materialize their epics, as AGENTS.md describes. Set `LOOP_ENABLED` to `true`, and optionally `LOOP_WINDOW`. Start a first run from the Actions tab with **sdd-dispatch → Run workflow**, or wait for the next merge or the hourly backstop.
 
 ## Working alongside it
 
@@ -171,7 +171,7 @@ gh issue list --label needs-human
 
 Answer each parked issue in its comments, then remove `needs-human` to return it with two fresh attempts. Removing the label starts a dispatch.
 
-Close an epic yourself once its sub-issues are done. That is your look at the whole before you move on.
+The workflows never close epics. The next orchestrator session closes those whose sub-issues are all closed, or you close them yourself.
 
 ## Stricter setup
 
