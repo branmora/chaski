@@ -55,14 +55,14 @@ Email-and-password signup, login, logout, and a session that persists across vis
 - No two-factor auth
 ```
 
-It comes out of a brainstorm with the orchestrator, usually alongside the other specs of the project. Once the questions run out, the person approves the whole set at once by marking each spec `Status: Approved`. That is the last answer the orchestrator waits for, and the autonomous run begins. It breaks the spec into atomic sub-issues, respecting the non-goals, and materializes them to GitHub in one pass. The epic is created first, then each task with its parent and its blocker set at creation:
+It comes out of a brainstorm with the orchestrator, usually alongside the other specs of the project. Once the questions run out, the person approves the whole set at once by marking each spec `Status: Approved`. That is the last answer the orchestrator waits for, and the autonomous run begins. It breaks the spec into atomic sub-issues, respecting the non-goals, and materializes them to GitHub in one pass. The epic is created first, then each task with its parent, its blocker, and its body set at creation:
 
 ```
-gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
-gh issue create --title "User schema and password hashing"  --parent 1               --body-file .github/tasks/auth-02.md  # -> #2
-gh issue create --title "Signup endpoint and form"          --parent 1 --blocked-by 2 --body-file .github/tasks/auth-03.md  # -> #3
-gh issue create --title "Login and session persistence"     --parent 1 --blocked-by 2 --body-file .github/tasks/auth-04.md  # -> #4
-gh issue create --title "Logout"                            --parent 1 --blocked-by 4 --body-file .github/tasks/auth-05.md  # -> #5
+gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md              # -> #1
+gh issue create --title "User schema and password hashing" --parent 1                --body "Passwords are stored hashed"      # -> #2
+gh issue create --title "Signup endpoint and form"         --parent 1 --blocked-by 2 --body "A visitor creates an account"     # -> #3
+gh issue create --title "Login and session persistence"    --parent 1 --blocked-by 2 --body "A returning user stays logged in" # -> #4
+gh issue create --title "Logout"                           --parent 1 --blocked-by 4 --body "A logged-in user can log out"     # -> #5
 ```
 
 GitHub now holds the whole plan. The epic shows its children and their order:
@@ -150,10 +150,10 @@ An agent that writes both the code and its tests can pass by testing what it bui
 
 **An issue closes when a merged PR with passing checks closes it. Never by hand.**
 
-A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. `gate` is a CI status check that runs the tests and the mechanical guards; the reviewer's verdict is a comment on the PR. The orchestrator merges when `gate` passes and the verdict reads `Verdict: pass`, and `Closes #<n>` closes the issue. The merge is mechanical: the orchestrator never merges on its own judgment and never holds back a PR that passed.
+A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. `gate` is a CI status check that runs the tests; the reviewer's verdict is a comment on the PR. The orchestrator merges when the checks are untouched, `gate` passes, and the verdict reads `Verdict: pass`, and `Closes #<n>` closes the issue. The merge is mechanical: the orchestrator never merges on its own judgment and never holds back a PR that passed.
 
 - Checks come before code, written by the orchestrator from the approved criteria
-- Checks are fixed during the task; an implementer commit that touches one fails the gate
+- Checks are fixed during the task; the orchestrator refuses to merge a branch whose implementer commits touched one
 - The gate is GitHub's status checks, never an agent's say-so
 - No manual closes; work that cannot pass stays open, and an epic closes when its last sub-issue does
 
@@ -189,6 +189,21 @@ If the project already has an `AGENTS.md`, add the convention there instead of r
 
 A current `gh` with native `--parent` and `--blocked-by` support.
 
-A CI workflow that reports a `gate` status check. Nothing depends on a paid GitHub plan: there is no auto-merge and no required branch protection, because the orchestrator merges only on a passing `gate` and `Verdict: pass`. Where the plan allows it, requiring `gate` in branch protection is a cheap backstop.
+A CI check named `gate` that runs the project's tests on pull requests and on the default branch. If the project already has CI, name its test job `gate`. If it has none, this workflow is enough, with the test command swapped for the project's own:
+
+```yaml
+# .github/workflows/gate.yml
+name: gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm test
+```
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.
