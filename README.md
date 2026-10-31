@@ -1,6 +1,6 @@
 # Spec-Driven Development on GitHub
 
-A single convention for running spec-driven development on GitHub's native issue features. One short spec per epic. The issue graph carries the breakdown, the order, and the state. Separate roles build and check the work, and every merge rests on evidence, so it can run while you steer or while you sleep.
+A single convention for running spec-driven development on GitHub's native issue features. Work runs in two phases. In **brainstorming**, a person and the orchestrator write one short spec per epic, and the person approves the set. In the **autonomous run**, the orchestrator does the rest: the issue graph carries the breakdown, the order, and the state, separate roles build and check the work, and every merge rests on evidence.
 
 ## The Problem
 
@@ -35,7 +35,7 @@ Take a feature: user accounts. Start with a one-page spec, `specs/001-user-authe
 
 ```
 # User Authentication — Spec
-Status: Draft
+Status: Approved
 
 ## Why
 Today everything is anonymous and lost on refresh. Users need accounts to save work.
@@ -44,10 +44,10 @@ Today everything is anonymous and lost on refresh. Users need accounts to save w
 Email-and-password signup, login, logout, and a session that persists across visits.
 
 ## Acceptance criteria
-- [ ] A visitor creates an account with email and password
-- [ ] A returning user logs in and stays logged in across visits
-- [ ] A logged-in user can log out
-- [ ] Passwords are stored hashed, never in plain text
+- A visitor creates an account with email and password
+- A returning user logs in and stays logged in across visits
+- A logged-in user can log out
+- Passwords are stored hashed, never in plain text
 
 ## Non-goals
 - No social login in v1
@@ -55,17 +55,14 @@ Email-and-password signup, login, logout, and a session that persists across vis
 - No two-factor auth
 ```
 
-Hand it to the orchestrator with one request:
-> Break specs/001-user-authentication.md into atomic sub-issues. Respect the non-goals.
-
-It proposes a breakdown. Prune it, then materialize the result to GitHub in one pass. The epic is created first, then each task with its parent and its blocker set at creation:
+It comes out of a brainstorm with the orchestrator, usually alongside the other specs of the project. Once the questions run out, the person approves the whole set at once by marking each spec `Status: Approved`. That is the last answer the orchestrator waits for, and the autonomous run begins. It breaks the spec into atomic sub-issues, respecting the non-goals, and materializes them to GitHub in one pass. The epic is created first, then each task with its parent, its blocker, and its body set at creation:
 
 ```
-gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
-gh issue create --title "User schema and password hashing"  --parent 1               --body-file .github/tasks/auth-02.md  # -> #2
-gh issue create --title "Signup endpoint and form"          --parent 1 --blocked-by 2 --body-file .github/tasks/auth-03.md  # -> #3
-gh issue create --title "Login and session persistence"     --parent 1 --blocked-by 2 --body-file .github/tasks/auth-04.md  # -> #4
-gh issue create --title "Logout"                            --parent 1 --blocked-by 4 --body-file .github/tasks/auth-05.md  # -> #5
+gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md              # -> #1
+gh issue create --title "User schema and password hashing" --parent 1                --body "Passwords are stored hashed"      # -> #2
+gh issue create --title "Signup endpoint and form"         --parent 1 --blocked-by 2 --body "A visitor creates an account"     # -> #3
+gh issue create --title "Login and session persistence"    --parent 1 --blocked-by 2 --body "A returning user stays logged in" # -> #4
+gh issue create --title "Logout"                           --parent 1 --blocked-by 4 --body "A logged-in user can log out"     # -> #5
 ```
 
 GitHub now holds the whole plan. The epic shows its children and their order:
@@ -78,9 +75,9 @@ GitHub now holds the whole plan. The epic shows its children and their order:
 └─ #5  Logout                              blocked by #4
 ```
 
-Before any code exists, the orchestrator turns each task's criteria into checks, committed as the first commit on its branch: `task/2` starts with `checks: #2`. You approve the checks with the breakdown. They are the contract, and no implementer may change them.
+Before any code exists, the orchestrator turns each task's criteria into checks, committed as the first commit on its branch: `task/2` starts with `checks: #2`. They are the contract, and no implementer may change them.
 
-Only `#2` has no open blocker, so it is the single task ready to start. An implementer works it on `task/2` and opens a PR that says `Closes #2`. GitHub runs the `gate` check, a reviewer that sees only the spec, the task, and the diff posts a `verdict`, and when both pass the PR merges and `#2` closes. `#3` and `#4` open up and can run in parallel. Merge `#4`, and `#5` follows. The spec stays in the repo as the record of intent. The issue graph runs the work, and every closed issue points to a merged PR and two passing checks.
+Only `#2` has no open blocker, so it is the single task ready to start. An implementer works it on `task/2` and opens a PR that says `Closes #2`. GitHub runs the `gate` check, a reviewer that sees only the spec, the task, and the diff posts its verdict, and when both pass the orchestrator merges the PR and `#2` closes. `#3` and `#4` open up and can run in parallel. Merge `#4`, and `#5` follows. When the last of them closes, the orchestrator closes the epic and moves to the next approved one. The spec stays in the repo as the record of intent. The issue graph runs the work, and every closed issue points to a merged PR, a passing `gate`, and a `Verdict: pass`.
 
 That is the whole method. The principles below explain why each move is shaped the way it is.
 
@@ -108,7 +105,7 @@ The breakdown lives as sub-issues under the epic. The order lives as blocking ed
 - Epic — a parent issue, marked with an `epic` label or an `Epic` issue type
 - Tasks — sub-issues of the epic
 - Order — blocking edges, between tasks and between epics alike
-- Progress — read straight from the issues, visible to the whole team
+- Progress — read straight from the issues, visible to the whole team; the spec is never edited to record it
 
 **The test:** Can the state of the work be answered from the issues alone? If a file has to be checked, the graph is not yet carrying it.
 
@@ -120,22 +117,22 @@ Every line under Non-goals stops a sub-issue from forming and keeps an agent ins
 
 - Name what the epic will not do, and where that work lives instead
 - Treat deferred scope as future epics, never as quiet additions to this one
-- Recheck the fence while pruning the derived sub-issues
+- Recheck the fence while deriving the sub-issues
 
 **The test:** Does each non-goal prevent a plausible mistake? A fence around nothing is noise.
 
 ### 4. Derive, Then Work the Ready Set
 
-**The model decomposes the spec. A person approves. Work flows in unblocked order.**
+**A person approves the spec. The orchestrator decomposes it. Work flows in unblocked order.**
 
-Hand-writing every substep wastes effort and over-specifies the how. The agent proposes atomic sub-issues and their checks, a person prunes and approves them, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down. Work that runs unattended only ever works a graph a person has approved.
+Hand-writing every substep wastes effort and over-specifies the how. The person's judgment goes into the spec, where it is cheapest. The orchestrator derives atomic sub-issues and their checks from it, materializes them without waiting, and the dependency graph decides what is ready. Each task carries its own throwaway plan, made fresh in the session and never written down. The person can read and steer the graph at any time, but nothing waits on them.
 
-- Derive, then review and cut the breakdown and its checks together, before creating anything
+- Derive an epic when it becomes ready, so its breakdown sees the code its blockers left
 - Materialize in one pass, with parent, blocking edges, and checks set at creation
 - Start only issues with no open blockers
 - Record non-obvious choices as numbered files in `DECISIONS/`, such as `DECISIONS/001-use-session-cookies.md`, when a spec shifts mid-flight
 
-**The test:** Did the model write the substeps and a person approve them? If someone hand-wrote the task list, the spec was doing the agent's job.
+**The test:** Did the model write the substeps from a spec a person approved? If someone hand-wrote the task list, the spec was doing the agent's job.
 
 ### 5. Separate the Roles
 
@@ -143,7 +140,7 @@ Hand-writing every substep wastes effort and over-specifies the how. The agent p
 
 An agent that writes both the code and its tests can pass by testing what it built instead of what the spec asked for. Three roles keep building and judging apart, each defined by what it sees and what it may change, not by a persona.
 
-- Orchestrator — owns the graph: derives, materializes, writes the checks, dispatches ready work. Writes no implementation code. Its mechanical half can be plain code.
+- Orchestrator — the brain of the run: derives, materializes, writes the checks, dispatches ready work, decides what the spec leaves open, merges on evidence, closes finished epics. Writes no implementation code. Its mechanical half can be plain code.
 - Implementer — one sub-issue, one branch. Cannot change the checks it must pass. Reports only what the checks cannot show: what it skipped and what it is unsure of.
 - Reviewer — sees only the spec, the sub-issue, and the diff, never the implementer's reasoning, so it is not anchored to the choices it judges. Rules on scope and non-goals; correctness is the gate's job.
 
@@ -153,14 +150,14 @@ An agent that writes both the code and its tests can pass by testing what it bui
 
 **An issue closes when a merged PR with passing checks closes it. Never by hand.**
 
-A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. Two required status checks guard the default branch: `gate` runs the tests and the mechanical guards, and `verdict` carries the reviewer's ruling. Each PR opens with auto-merge enabled, so when both pass GitHub merges it, not an agent, and `Closes #<n>` closes the issue.
+A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. `gate` is a CI status check that runs the tests; the reviewer's verdict is a comment on the PR. The orchestrator merges when the checks are untouched, `gate` passes, and the verdict reads `Verdict: pass`, and `Closes #<n>` closes the issue. The merge is mechanical: the orchestrator never merges on its own judgment and never holds back a PR that passed.
 
-- Checks come before code, written by the orchestrator and approved by a person
-- Checks are fixed during the task; an implementer commit that touches one fails the gate
+- Checks come before code, written by the orchestrator from the approved criteria
+- Checks are fixed during the task; the orchestrator refuses to merge a branch whose implementer commits touched one
 - The gate is GitHub's status checks, never an agent's say-so
-- No manual closes; work that cannot pass stays open
+- No manual closes; work that cannot pass stays open, and an epic closes when its last sub-issue does
 
-**The test:** Can every closed issue point to a merged PR, a passing `gate`, and a passing `verdict`? If one cannot, the graph is reporting a claim, not a fact.
+**The test:** Can every closed issue point to a merged PR, a passing `gate`, and a `Verdict: pass`? If one cannot, the graph is reporting a claim, not a fact.
 
 ## Running Unattended
 
@@ -180,11 +177,10 @@ Heavier frameworks add phases, validators, and harnesses, and those pay off at l
 
 ## Install
 
-Copy the shared agent instructions and the protected-paths list into a project:
+Copy the shared agent instructions into a project:
 
 ```
 curl -o AGENTS.md https://raw.githubusercontent.com/branmora/spec-driven-github/main/AGENTS.md
-mkdir -p .github && curl -o .github/protected-paths https://raw.githubusercontent.com/branmora/spec-driven-github/main/.github/protected-paths
 ```
 
 If the project already has an `AGENTS.md`, add the convention there instead of replacing its existing instructions.
@@ -201,6 +197,21 @@ To run it unattended, follow [`automation/README.md`](automation/README.md).
 
 A current `gh` with native `--parent` and `--blocked-by` support.
 
-A CI workflow that reports a `gate` status check, branch protection that requires `gate` and `verdict` on the default branch, and auto-merge allowed in the repository settings. `automation/` provides the workflows.
+A CI check named `gate` that runs the project's tests on pull requests and on the default branch. If the project already has CI, name its test job `gate`. If it has none, this workflow is enough, with the test command swapped for the project's own:
+
+```yaml
+# .github/workflows/gate.yml
+name: gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm test
+```
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.
