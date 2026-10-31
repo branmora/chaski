@@ -1,4 +1,9 @@
-# Spec-Driven Development on GitHub
+<div align="center">
+  <img src="assets/logo.svg" alt="" width="96" height="96" />
+  <h1>chaski</h1>
+  <p><strong>Ship fast with coding agents, on GitHub's own issues.</strong></p>
+  <p>A lightweight convention for solo developers and small teams.<br/>One file to copy · One approval · No tracker, no database, nothing new to install</p>
+</div>
 
 A single convention for running spec-driven development on GitHub's native issue features. Work runs in two phases. In **brainstorming**, a person and the orchestrator write one short spec per epic, and the person approves the set. In the **autonomous run**, the orchestrator does the rest: the issue graph carries the breakdown, the order, and the state, separate roles build and check the work, and every merge rests on evidence.
 
@@ -174,7 +179,7 @@ Heavier frameworks add phases, validators, and harnesses, and those pay off at l
 Copy the shared agent instructions into a project:
 
 ```
-curl -o AGENTS.md https://raw.githubusercontent.com/branmora/spec-driven-github/main/AGENTS.md
+curl -o AGENTS.md https://raw.githubusercontent.com/branmora/chaski/main/AGENTS.md
 ```
 
 If the project already has an `AGENTS.md`, add the convention there instead of replacing its existing instructions.
@@ -187,7 +192,7 @@ If the project already has an `AGENTS.md`, add the convention there instead of r
 
 ## Requirements
 
-A current `gh` with native `--parent` and `--blocked-by` support.
+`gh` 2.94.0 or later, the release that added `--parent` and `--blocked-by`.
 
 A CI check named `gate` that runs the project's tests on pull requests and on the default branch. If the project already has CI, name its test job `gate`. If it has none, this workflow is enough, with the test command swapped for the project's own:
 
@@ -207,3 +212,7 @@ jobs:
 ```
 
 Issue types need a GitHub organization. Without one, epics use a label, and everything else works the same.
+
+## The Name
+
+The chaskis were the relay runners of the Inca road network: a message crossed the Andes passed from runner to runner, each carrying it across their own stretch. The roles here carry the work the same way, from orchestrator to implementer to reviewer, and the record travels with it in GitHub's issue graph.
