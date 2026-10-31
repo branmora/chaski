@@ -130,7 +130,7 @@ Every role and every tool reads the same names.
 | `in-progress` | Issue dispatched; nothing else takes it |
 | `needs-human` | Issue parked for a person on a critical decision; it leaves the ready set |
 | `Waiting: <command> → <log>` | Comment on a sub-issue whose role is waiting on detached work; the issue keeps `in-progress` |
-| `gate` | Status check from CI: the tests and the mechanical guards |
+| `gate` | Status check from CI that runs the tests |
 | `Verdict: pass` / `Verdict: fail — <reason>` | First line of the reviewer's verdict, posted on the PR |
 
 ## Spec Template
@@ -154,11 +154,13 @@ The fence. Each line stops a sub-issue from forming.
 
 ## Materialize
 
-Create the epic, then the tasks in dependency order so every reference already exists:
+Create the epic, then the tasks in dependency order so every reference already exists. Task bodies go straight into the issues:
 
 ```
 gh issue create --title "Epic <number>: <name>" --label epic --body-file specs/<number>-<name>.md
-gh issue create --title "<task>" --parent <epic#> --blocked-by <prev#> --body-file .github/tasks/<id>.md
+gh issue create --title "<task>" --parent <epic#> --blocked-by <prev#> --body-file - <<'EOF'
+<task body>
+EOF
 ```
 
 Then give each task its branch and checks:
@@ -177,16 +179,14 @@ git add <checks path> && git commit -m "checks: #<n>" && git push -u origin task
 
 ## Finding Ready Work
 
-An issue is ready when it is open, has no open blocker, has its `task/<n>` branch, and carries neither `in-progress` nor `needs-human`. An epic is ready to derive when it is open, has no open blocker, and has no sub-issues yet. Nothing is dispatched while the default branch is failing. Whoever dispatches an issue adds `in-progress`; parking it removes it. Read the list of child issues, not the summary counter:
+An issue is ready when it is open, has no open blocker, has its `task/<n>` branch, and carries neither `in-progress` nor `needs-human`. An epic is ready to derive when it is open, has no open blocker, and has no sub-issues yet. Nothing is dispatched while the default branch is failing. Whoever dispatches an issue adds `in-progress`; parking it removes it. Read the lists of sub-issues and blockers, not the summary counters, and stop if either is cut off:
 
 ```
 subs=$(gh issue view <epic#> --json subIssues -q 'if .subIssues.totalCount > (.subIssues.nodes | length) then error("sub-issue list is cut off") else .subIssues.nodes[].number end') || { echo "cannot read sub-issues of #<epic#>" >&2; exit 1; }
-for n in $subs; do
-  blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy.nodes[] | select(.state=="OPEN")] | length')
-  state=$(gh issue view "$n" --json state -q .state)
-  held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
+for n in $(echo $subs); do
+  ready=$(gh issue view "$n" --json state,labels,blockedBy -q 'if .blockedBy.totalCount > (.blockedBy.nodes | length) then error("blocker list is cut off") else .state == "OPEN" and all(.blockedBy.nodes[]; .state != "OPEN") and all(.labels[]; .name != "needs-human" and .name != "in-progress") end') || { echo "cannot read #$n" >&2; exit 1; }
   git ls-remote --exit-code --heads origin "task/$n" >/dev/null || continue
-  [ "$state" = "OPEN" ] && [ "$blockers" -eq 0 ] && [ "$held" = "false" ] && echo "ready -> #$n"
+  [ "$ready" = "true" ] && echo "ready -> #$n"
 done
 ```
 
@@ -214,9 +214,16 @@ gh pr create --base main --head task/<n> --title "<task>" --body-file <report>
 
 ## Merging
 
-The orchestrator merges a PR into the default branch when its `gate` passes and the reviewer's verdict reads `Verdict: pass`. The merge is mechanical: a PR that passes both is merged, and one that does not is not. Skipped or Unsure work the spec still needs becomes a new sub-issue.
+The orchestrator merges a PR into the default branch when its checks are untouched, its `gate` passes, and the reviewer's verdict reads `Verdict: pass`. The checks are untouched when the task branch has a `checks: #<n>` commit and no other commit on it changes a file a `checks: #<n>` commit changed. The merge is mechanical: a PR that passes all three is merged, and one that does not is not. Skipped or Unsure work the spec still needs becomes a new sub-issue.
 
 ```
+git fetch -q origin main "task/<n>" || exit 1
+r="origin/main..origin/task/<n>" g='^checks: #<n>$'
+files_of() { git log "$r" --no-merges --no-renames --format= --name-only "$@" | sed '/^$/d' | sort -u; }
+checks=$(files_of --grep="$g")
+[ -n "$checks" ] || { echo "task/<n> has no checks commit" >&2; exit 1; }
+touched=$(comm -12 <(printf '%s\n' "$checks") <(files_of --invert-grep --grep="$g"))
+[ -z "$touched" ] || { echo "task/<n> changed its checks:" $touched >&2; exit 1; }
 gh pr checks task/<n> && gh pr merge task/<n> --squash --delete-branch
 ```
 
@@ -232,7 +239,7 @@ The orchestrator parks with `needs-human` only when the decision is critical:
 
 Everything else, the orchestrator decides: open questions the spec leaves, task order, splitting or adding sub-issues inside the fence, the reading of an unclear criterion.
 
-Failures follow one path. A failing `gate` or verdict goes back to the implementer with what failed. On a second failure, the orchestrator makes one move: retry with a fresh implementer, split the task, or rewrite checks that misread the spec. If the issue fails again, it parks.
+Failures follow one path. Touched checks, a failing `gate`, or a failing verdict go back to the implementer with what failed. On a second failure, the orchestrator makes one move: retry with a fresh implementer, split the task, or rewrite checks that misread the spec. If the issue fails again, it parks.
 
 To park, put the question on the issue, add `needs-human`, and remove `in-progress`. A parked issue leaves the ready set; the rest of the graph keeps moving. A person answers in the comments, then removes `needs-human` to return it with fresh attempts.
 

@@ -36,20 +36,13 @@ Four tasks come out. The schema and hashing come first because signup and login 
 
 ## 3. Materialize
 
-Create the epic, then the tasks in dependency order so every reference already exists. No organization here, so the epic uses a label:
+Create the epic, then the tasks in dependency order so every reference already exists. No organization here, so the epic uses a label. Each task body goes straight into its issue; here they are cut to one line, except `#4`'s:
 
 ```
-gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md   # -> #1
-gh issue create --title "User schema and password hashing"  --parent 1               --body-file .github/tasks/auth-02.md  # -> #2
-gh issue create --title "Signup endpoint and form"          --parent 1 --blocked-by 2 --body-file .github/tasks/auth-03.md  # -> #3
-gh issue create --title "Login and session persistence"     --parent 1 --blocked-by 2 --body-file .github/tasks/auth-04.md  # -> #4
-gh issue create --title "Logout"                            --parent 1 --blocked-by 4 --body-file .github/tasks/auth-05.md  # -> #5
-```
-
-A task body stays small and avoids the how. The acceptance criteria are the contract; the implementer decides the method at build time:
-
-```
-<!-- .github/tasks/auth-04.md -->
+gh issue create --title "Epic 001: User authentication" --label epic --body-file specs/001-user-authentication.md              # -> #1
+gh issue create --title "User schema and password hashing" --parent 1                --body "Passwords are stored hashed"      # -> #2
+gh issue create --title "Signup endpoint and form"         --parent 1 --blocked-by 2 --body "A visitor creates an account"     # -> #3
+gh issue create --title "Login and session persistence"    --parent 1 --blocked-by 2 --body-file - <<'EOF'                     # -> #4
 ## Description
 Authenticate a returning user and keep them logged in across visits.
 
@@ -64,7 +57,11 @@ Authenticate a returning user and keep them logged in across visits.
 ## Non-goals
 - Does not handle signup (that is #3)
 - Does not handle logout (that is #5)
+EOF
+gh issue create --title "Logout"                           --parent 1 --blocked-by 4 --body "A logged-in user can log out"     # -> #5
 ```
+
+A task body stays small and avoids the how. The acceptance criteria are the contract; the implementer decides the method at build time.
 
 ## 4. The checks
 
@@ -78,7 +75,7 @@ git commit -m "checks: #4"
 git push -u origin task/4
 ```
 
-The checks are fixed for the implementer: an implementer commit that touches them fails the gate. Only the orchestrator may rewrite them, with a later `checks: #4` commit, and only when they misread the spec.
+The checks are fixed for the implementer: the orchestrator will not merge a branch where an implementer commit touched them. Only the orchestrator may rewrite them, with a later `checks: #4` commit, and only when they misread the spec.
 
 ## 5. The resulting graph
 
@@ -92,16 +89,14 @@ The checks are fixed for the implementer: an implementer commit that touches the
 
 ## 6. Find ready work
 
-Read the list of child issues, not the summary counter:
+Read the lists of sub-issues and blockers, not the summary counters, and stop if either is cut off:
 
 ```
 subs=$(gh issue view 1 --json subIssues -q 'if .subIssues.totalCount > (.subIssues.nodes | length) then error("sub-issue list is cut off") else .subIssues.nodes[].number end') || { echo "cannot read sub-issues of #1" >&2; exit 1; }
-for n in $subs; do
-  blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy.nodes[] | select(.state=="OPEN")] | length')
-  state=$(gh issue view "$n" --json state -q .state)
-  held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
+for n in $(echo $subs); do
+  ready=$(gh issue view "$n" --json state,labels,blockedBy -q 'if .blockedBy.totalCount > (.blockedBy.nodes | length) then error("blocker list is cut off") else .state == "OPEN" and all(.blockedBy.nodes[]; .state != "OPEN") and all(.labels[]; .name != "needs-human" and .name != "in-progress") end') || { echo "cannot read #$n" >&2; exit 1; }
   git ls-remote --exit-code --heads origin "task/$n" >/dev/null || continue
-  [ "$state" = "OPEN" ] && [ "$blockers" -eq 0 ] && [ "$held" = "false" ] && echo "ready -> #$n"
+  [ "$ready" = "true" ] && echo "ready -> #$n"
 done
 ```
 
@@ -129,7 +124,7 @@ Verdict: pass
 Stays inside #4: no signup or logout code, no reset flow. The 30-day lifetime is a choice the spec leaves open.
 ```
 
-`gate` passes and the verdict reads `Verdict: pass`, so the orchestrator merges the PR and `#4` closes. It notes the 30-day choice as a decision in its final report rather than asking. A failure gives the task one more attempt with what failed; on a second failure the orchestrator retries fresh, splits the task, or fixes checks that misread the spec. Only a third failure parks it with `needs-human`.
+The checks are untouched, `gate` passes, and the verdict reads `Verdict: pass`, so the orchestrator merges the PR and `#4` closes. It notes the 30-day choice as a decision in its final report rather than asking. A failure gives the task one more attempt with what failed; on a second failure the orchestrator retries fresh, splits the task, or fixes checks that misread the spec. Only a third failure parks it with `needs-human`.
 
 `#5` is blocked only by `#4`, so it is the next task in the chain: the session that built login continues to logout without rereading the codebase. `#3` sits on a branch of the graph, so a separate session takes it in parallel. When `#3` and `#5` have both merged, the orchestrator closes `#1` and moves to the next approved epic.
 
