@@ -180,7 +180,8 @@ git add <checks path> && git commit -m "checks: #<n>" && git push -u origin task
 An issue is ready when it is open, has no open blocker, has its `task/<n>` branch, and carries neither `in-progress` nor `needs-human`. An epic is ready to derive when it is open, has no open blocker, and has no sub-issues yet. Nothing is dispatched while the default branch is failing. Whoever dispatches an issue adds `in-progress`; parking it removes it. Read the list of child issues, not the summary counter:
 
 ```
-for n in $(gh issue view <epic#> --json subIssues -q '.subIssues.nodes[].number'); do
+subs=$(gh issue view <epic#> --json subIssues -q 'if .subIssues.totalCount > (.subIssues.nodes | length) then error("sub-issue list is cut off") else .subIssues.nodes[].number end') || { echo "cannot read sub-issues of #<epic#>" >&2; exit 1; }
+for n in $subs; do
   blockers=$(gh issue view "$n" --json blockedBy -q '[.blockedBy.nodes[] | select(.state=="OPEN")] | length')
   state=$(gh issue view "$n" --json state -q .state)
   held=$(gh issue view "$n" --json labels -q '[.labels[].name] | any(. == "needs-human" or . == "in-progress")')
