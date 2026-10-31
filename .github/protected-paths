@@ -1,8 +1,0 @@
-# Paths whose changes only a person merges. One per line.
-# A trailing slash covers a whole directory. Lines starting with # are comments.
-# An implementer commit that touches any of these parks its issue with needs-human.
-
-.github/
-AGENTS.md
-specs/
-tests/acceptance/
