@@ -82,7 +82,7 @@ GitHub now holds the whole plan. The epic shows its children and their order:
 
 Before any code exists, the orchestrator turns each task's criteria into checks, committed as the first commit on its branch: `task/2` starts with `checks: #2`. They are the contract, and no implementer may change them.
 
-Only `#2` has no open blocker, so it is the single task ready to start. An implementer works it on `task/2` and opens a PR that says `Closes #2`. GitHub runs the `gate` check, a reviewer that sees only the spec, the task, and the diff posts its verdict, and when both pass the orchestrator merges the PR and `#2` closes. `#3` and `#4` open up and can run in parallel. Merge `#4`, and `#5` follows. When the last of them closes, the orchestrator closes the epic and moves to the next approved one. The spec stays in the repo as the record of intent. The issue graph runs the work, and every closed issue points to a merged PR, a passing `gate`, and a `Verdict: pass`.
+Only `#2` has no open blocker, so it is the single task ready to start. An implementer works it on `task/2` and opens a PR that says `Closes #2`. The orchestrator runs the `gate` on the PR's head, then a reviewer that sees only the spec, the task, and the diff posts its verdict, and when both pass the orchestrator merges the PR and `#2` closes. `#3` and `#4` open up and can run in parallel. Merge `#4`, and `#5` follows. When the last of them closes, the orchestrator closes the epic and moves to the next approved one. The spec stays in the repo as the record of intent. The issue graph runs the work, and every closed issue points to a merged PR, a passing `gate`, and a `Verdict: pass`.
 
 That is the whole method. The principles below explain why each move is shaped the way it is.
 
@@ -145,8 +145,8 @@ Hand-writing every substep wastes effort and over-specifies the how. The person'
 
 An agent that writes both the code and its tests can pass by testing what it built instead of what the spec asked for. Three roles keep building and judging apart, each defined by what it sees and what it may change, not by a persona.
 
-- Orchestrator — the brain of the run: derives, materializes, writes the checks, dispatches ready work, decides what the spec leaves open, merges on evidence, closes finished epics. Writes no implementation code. Its mechanical half can be plain code.
-- Implementer — one sub-issue, one branch. Cannot change the checks it must pass. Reports only what the checks cannot show: what it skipped and what it is unsure of.
+- Orchestrator — the brain of the run: derives, materializes, writes the checks, dispatches ready work, runs the gate, decides what the spec leaves open, merges on evidence, closes finished epics. Writes no implementation code. Its mechanical half can be plain code.
+- Implementer — one sub-issue, one branch, its own worktree. Cannot change the checks it must pass, and adds no tests the sub-issue does not ask for. Reports only what the checks cannot show: what it skipped and what it is unsure of.
 - Reviewer — sees only the spec, the sub-issue, and the diff, never the implementer's reasoning, so it is not anchored to the choices it judges. Rules on scope and non-goals; correctness is the gate's job.
 
 **The test:** Did any role approve work it produced? If yes, the roles have collapsed into one.
@@ -155,11 +155,11 @@ An agent that writes both the code and its tests can pass by testing what it bui
 
 **An issue closes when a merged PR with passing checks closes it. Never by hand.**
 
-A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and GitHub, not an agent, records whether they pass. `gate` is a CI status check that runs the tests; the reviewer's verdict is a comment on the PR. The orchestrator merges when the checks are untouched, `gate` passes, and the verdict reads `Verdict: pass`, and `Closes #<n>` closes the issue. The merge is mechanical: the orchestrator never merges on its own judgment and never holds back a PR that passed.
+A closed issue is the graph saying the work is done, so the claim needs proof that does not rest on an agent's report. The checks are written from the criteria before the code, and whether they pass is an exit code, not an agent's account. `gate` is a commit status: the orchestrator runs the tests on the PR's head and records the result on that commit. The reviewer runs once the gate passes; its verdict is a comment on the PR. The orchestrator merges when the checks are untouched, `gate` passes, and the verdict reads `Verdict: pass`, and `Closes #<n>` closes the issue. The merge is mechanical: the orchestrator never merges on its own judgment and never holds back a PR that passed.
 
-- Checks come before code, written by the orchestrator from the approved criteria
+- Checks come before code, written by the orchestrator from the approved criteria, one per criterion and no more
 - Checks are fixed during the task; the orchestrator refuses to merge a branch whose implementer commits touched one
-- The gate is GitHub's status checks, never an agent's say-so
+- The gate is an exit code recorded on the commit it tested, never an agent's say-so
 - No manual closes; work that cannot pass stays open, and an epic closes when its last sub-issue does
 
 **The test:** Can every closed issue point to a merged PR, a passing `gate`, and a `Verdict: pass`? If one cannot, the graph is reporting a claim, not a fact.
@@ -202,13 +202,14 @@ To run it unattended, follow [`automation/README.md`](automation/README.md).
 
 `gh` 2.94.0 or later, the release that added `--parent` and `--blocked-by`.
 
-A CI check named `gate` that runs the project's tests on pull requests and on the default branch. If the project already has CI, name its test job `gate`. If it has none, this workflow is enough, with the test command swapped for the project's own:
+A test command, written in place of `<test command>` in `AGENTS.md`. The orchestrator runs it locally on each PR, in a fresh worktree, so it includes any install step and costs no CI minutes.
+
+A CI check named `gate` that runs the same command on the default branch, as a backstop. If the project already has CI, name its test job `gate`. If it has none, this workflow is enough, with the test command swapped for the project's own:
 
 ```yaml
 # .github/workflows/gate.yml
 name: gate
 on:
-  pull_request:
   push:
     branches: [main]
 jobs:

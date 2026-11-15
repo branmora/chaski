@@ -69,8 +69,8 @@ Hand-writing every substep over-specifies the how. The person's judgment goes in
 
 An agent that writes both the code and its checks can pass by testing what it built instead of what the spec asked for. Split the work into three roles, each defined by what it sees and what it may change. A role is a boundary, not a persona. A session is a cache, not a role: an implementer may carry what it learned along its chain, but a reviewer always starts fresh, because its independence is the point. A cache only pays while it is warm, so no role idles to keep one alive.
 
-- Orchestrator — the brain of the run: derives, materializes, writes the checks, dispatches ready issues, decides what the spec leaves open, merges on evidence, and closes finished epics. Writes no implementation code; its mechanical parts may run as plain code.
-- Implementer — works one sub-issue at a time on its task branch. Sees the spec, the sub-issue, and the code. Never edits the checks. Opens its PR with the report below.
+- Orchestrator — the brain of the run: derives, materializes, writes the checks, dispatches ready issues, runs the gate, decides what the spec leaves open, merges on evidence, and closes finished epics. Writes no implementation code; its mechanical parts may run as plain code.
+- Implementer — works one sub-issue at a time on its task branch, in its own worktree. Sees the spec, the sub-issue, and the code. Never edits the checks, runs only its own while building, and adds no tests the sub-issue does not ask for. Opens its PR with the report below.
 - Reviewer — sees only the spec, the sub-issue, and the diff, never the PR description or the implementer's reasoning. Gives a verdict on scope and non-goals.
 
 **The test:** Did any role approve work it produced? If yes, the roles have collapsed into one.
@@ -81,9 +81,9 @@ An agent that writes both the code and its checks can pass by testing what it bu
 
 A closed issue is the graph saying the work is done, so the claim needs proof that does not depend on an agent's report. The implementer's PR says `Closes #<n>`. The orchestrator merges it as in Merging, and the merge closes the issue.
 
-- Checks come before code — written from the criteria by the orchestrator, as the task branch's `checks: #<n>` commit, never on the default branch
+- Checks come before code — written by the orchestrator, one per criterion and no more, as the task branch's `checks: #<n>` commit, never on the default branch
 - Checks are fixed for the implementer — no implementer commit touches a file a checks commit added
-- The gate is GitHub's — a status check from CI, never an agent's say-so
+- The gate is an exit code — the orchestrator runs the tests on the PR's head and posts the result on that commit, never an agent's say-so
 - No manual closes — a task closes only through its merged PR; an epic closes when its last sub-issue does, with no PR of its own
 
 **The test:** Can every closed issue point to a merged PR, a passing `gate`, and a `Verdict: pass`? If one cannot, the graph is reporting a claim, not a fact.
@@ -95,7 +95,7 @@ A closed issue is the graph saying the work is done, so the claim needs proof th
 3. The orchestrator creates an epic issue per approved spec, with blocking edges between epics.
 4. When an epic is ready, the orchestrator derives its sub-issues and checks, respecting the non-goals, and materializes them in one pass: the issues, their blocking edges, and a `task/<n>` branch per issue whose first commit holds its checks.
 5. Each ready issue goes to an implementer. Ready issues run in parallel; when a task merges and is the only blocker of the next, the same session continues the chain.
-6. The implementer opens a PR with its report; a reviewer gives a verdict.
+6. The implementer opens a PR with its report. The orchestrator runs the gate; once it passes, a reviewer gives a verdict.
 7. The orchestrator merges the PR, and the merge closes the issue. When an epic's last sub-issue closes, the orchestrator closes the epic issue and continues with the next, no PR and no permission needed. The ready set changes, and the loop repeats.
 8. Record non-obvious choices in `DECISIONS/<number>-<name>.md`, such as `DECISIONS/001-use-session-cookies.md`.
 
@@ -130,7 +130,7 @@ Every role and every tool reads the same names, whether a person or a workflow r
 | `in-progress` | Issue dispatched; nothing else takes it |
 | `needs-human` | Issue parked for a person on a critical decision; it leaves the ready set |
 | `Waiting: <command> → <log>` | Comment on a sub-issue whose role is waiting on detached work; the issue keeps `in-progress` |
-| `gate` | Status check from CI that runs the tests |
+| `gate` | Status the orchestrator posts on a PR's head after running `<test command>` there |
 | `Verdict: pass` / `Verdict: fail — <reason>` | First line of the reviewer's verdict, posted on the PR |
 | `verdict` | Status check the review workflow sets from the reviewer's verdict, when running unattended |
 | `.github/protected-paths` | Paths whose changes only a person merges, when running unattended |
@@ -217,6 +217,17 @@ gh pr create --base main --head task/<n> --title "<task>" --body-file <report>
 ## Merging
 
 The orchestrator merges a PR into the default branch when its checks are untouched, its `gate` passes, and the reviewer's verdict reads `Verdict: pass`. The checks are untouched when the task branch has a `checks: #<n>` commit and no other commit on it changes a file a `checks: #<n>` commit changed. The merge is mechanical: a PR that passes all three is merged, and one that does not is not. Skipped or Unsure work the spec still needs becomes a new sub-issue.
+
+The gate runs when the PR opens, and again on each new head:
+
+```
+git fetch -q origin "task/<n>" && git worktree add -q --detach /tmp/gate-<n> "origin/task/<n>" || exit 1
+(cd /tmp/gate-<n> && <test command>) && s=success || s=failure
+gh api "repos/{owner}/{repo}/statuses/$(git rev-parse origin/task/<n>)" -f context=gate -f state=$s
+git worktree remove --force /tmp/gate-<n>
+```
+
+Then the merge:
 
 ```
 git fetch -q origin main "task/<n>" || exit 1
