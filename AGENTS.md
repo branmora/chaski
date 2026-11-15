@@ -269,6 +269,7 @@ Agents act with the identity of the person who runs them, so the limits live her
 The workflows in `automation/` run the same loop with no session open. They work only issues that already have their `task/<n>` branch and checks; deriving and materializing stay with an orchestrator session. What changes:
 
 - GitHub merges, not the orchestrator — each task PR opens with auto-merge, and branch protection requires `gate` and `verdict`
+- `gate` is a CI check — the gate workflow runs the tests on every task PR, the reviewer runs alongside it, and the implementer runs the whole suite before it finishes
 - `verdict` is a status check the review workflow sets from the reviewer's first line, never reworded
 - The checks guard from Merging runs inside `gate`
 - A PR whose implementer commits touch a path in `.github/protected-paths` gets `needs-human` and no auto-merge; only a person merges it
