@@ -116,7 +116,7 @@ Closes #4
 - Session lifetime set to 30 days; the spec names none
 ```
 
-GitHub runs `gate`. A reviewer, shown only the spec, the sub-issue, and the diff, posts its verdict:
+The orchestrator runs the gate on the PR's head and posts the `gate` status. Once it passes, a reviewer, shown only the spec, the sub-issue, and the diff, posts its verdict:
 
 ```
 Verdict: pass
